@@ -22,29 +22,10 @@
 #import <Cocoa/Cocoa.h>
 
 // is app's delegate. is dockMenu's delegate
-@interface AppMenu : NSObject {
-  IBOutlet NSMenu *dockMenu_;
-  IBOutlet NSWindow *preferencesWindow_;
-  IBOutlet NSControl *ignoringParentheses_;
-  IBOutlet NSTextField *rootField_;
+@interface AppMenu : NSObject
 
-  // builder thread only
-  NSMenu *appMenu_;
-  BOOL isIgnoringParentheses_;
-
-  // Maps paths to kqueues
-  NSMutableDictionary *kqueues_;
-
-  // builder state machine reentrancy guard
-  BOOL isRebuilding_;
-
-  // between KQueue callback, builder
-  BOOL moreToDo_;
-
-  BOOL isTerminating_;
-
-  NSTimeInterval timeOfLastYield_;
-}
 - (IBAction)showPreferencesPanel:(id)sender;
+
 - (IBAction)toggleIgnoringParentheses:(id)sender;
+
 @end

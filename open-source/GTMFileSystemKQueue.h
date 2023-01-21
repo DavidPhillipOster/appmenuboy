@@ -50,7 +50,7 @@ typedef unsigned int GTMFileSystemKQueueEvents;
   int fd_;
   GTMFileSystemKQueueEvents events_;
   BOOL acrossReplace_;
-  __weak id target_;
+  __unsafe_unretained id target_;
   SEL action_;
 }
 

@@ -87,14 +87,19 @@
 //   using an alternate root.
 // TODO: make two passes over the directory tree, one to get app names, a second
 // pass to get the icons. That should make getting the initial menu much faster.
-// TODO: Add error message if root directory has no contents.
-// Since the alternate root feature is not quite ready for prime-time, I've set
-// the preference window frame to hide the feature.
+// 1.0.8 4/29/2018
+// Allow dragging a folder from the Finder into the preferences text box.
+// Error message if text in the preferences text box isn't a folder.
+// 1.0.9 11/11/2019 In Catalina, some the apps moved from /Applications to /System/Applications
+// 1.0.10 11/14/2020 In Big Sur, found a small memory leak.
+// 1.0.11 11/24/2020 macOS V 11. fixed: dock menu was empty initially after boot.
+// 1.0.12 Since Catalina there are two utilities menus.
+// 1.0.13 12/21/2021 Monterey: merge the two utilities menus. min OS now 10.11, fix all warnings
+// TODO: Add error message if root directory set in preferences has no contents.
+// TODO: Use FSEvents instead of GTMFileSystemKQueue https://developer.apple.com/documentation/coreservices/file_system_events?language=objc
 
 #import "AppMenu.h"
-#import <Carbon/Carbon.h>
 #import "GTMFileSystemKQueue.h" // see http://code.google.com/mac/
-#import "NSString+ResolveAlias.h"
 
 // usage:   DEBUGBLOCK{ NSLog(@"Debugging only code block here."); }
 #if DEBUG
@@ -103,39 +108,33 @@
 #define DEBUGBLOCK if(0)
 #endif
 
-// Assume that Carbon apps are not supported in OS X 10.7 an d newer.
-static BOOL AreCarbonAppsSupported(void) {
-  static BOOL isInitialized = NO;
-  static BOOL areCarbonAppsSupported = YES;
-  if ( ! isInitialized) {
-    isInitialized = YES;
-    SInt32 major = 0, minor = 0;
-    if (noErr == Gestalt(gestaltSystemVersionMajor, &major) &&
-        noErr == Gestalt(gestaltSystemVersionMinor, &minor)) {
-      if (10 <= major && 7 <= minor) {
-        areCarbonAppsSupported = NO;
-      }
+typedef enum {
+  kGoodKind,
+  kNonexistentKind,
+  kEmptyKind,
+} PathKindEnum;
+
+@interface NSArray(AppMenu)
+- (NSMenuItem *)firstItemOfTitle:(NSString *)name;
+@end
+@implementation NSArray(AppMenu)
+- (NSMenuItem *)firstItemOfTitle:(NSString *)name {
+  for (NSMenuItem *item in self) {
+    if ([[item title] isEqual:name]) {
+      return item;
     }
   }
-  return areCarbonAppsSupported;
+  return nil;
 }
- 
-@interface NSMenu(AppMenu)
+@end
 
-- (void)removeAllItems;
+@interface NSMenu(AppMenu)
 
 - (void)resetFromArray:(NSArray *)array;
 
 @end
 
 @implementation NSMenu(AppMenu)
-
-- (void)removeAllItems {
-  int i, iCount = [self numberOfItems];
-  for (i = iCount - 1;0 <= i; --i) {
-    [self removeItemAtIndex:i];
-  }
-}
 
 - (void)resetFromArray:(NSArray *)array {
   [self removeAllItems];
@@ -158,6 +157,25 @@ static BOOL AreCarbonAppsSupported(void) {
 
 - (NSComparisonResult)compareAsFinder:(NSMenuItem *)other {
   return [[self title] localizedCaseInsensitiveCompare:[other title]];
+}
+
+@end
+
+@interface NSURL(AppMenu)
+
+- (NSString *)app_displayName;
+
+@end
+
+@implementation NSURL(AppMenu)
+
+- (NSString *)app_displayName {
+  NSString *result = nil;
+  NSError *error;
+  if (![self getResourceValue:&result forKey:NSURLLocalizedNameKey error:&error]) {
+    // NSLog(@"%@", error);
+  }
+  return result;
 }
 
 @end
@@ -191,24 +209,72 @@ typedef enum  {
 - (void)yield;
 @end
 
-@implementation AppMenu
+@implementation AppMenu {
+  IBOutlet NSMenu *dockMenu_;
+  IBOutlet NSWindow *preferencesWindow_;
+  IBOutlet NSControl *ignoringParentheses_;
+  IBOutlet NSTextField *rootField_;
+  IBOutlet NSTextField *messageField_;
+  NSString *messageDefault_;
 
-- (void)applicationDidFinishLaunching:(NSNotification *)notification {
-  NSString *menuTitle = NSLocalizedString(@"Apps", @"");
-  NSMenuItem *item = [[[NSMenuItem alloc] initWithTitle:menuTitle action:nil keyEquivalent:@""] autorelease];
+  // builder thread only
+  NSMenu *appMenu_;
+  BOOL isIgnoringParentheses_;
+
+  // Maps paths to kqueues
+  NSMutableDictionary *kqueues_;
+
+  // builder state machine reentrancy guard
+  BOOL isRebuilding_;
+
+  // between KQueue callback, builder
+  BOOL moreToDo_;
+
+  BOOL isTerminating_;
+
+  NSTimeInterval timeOfLastYield_;
+}
+
+
+- (NSMenu *)constructWorkingMenu {
   NSString *workingTitle = NSLocalizedString(@"Working", @"");
   NSMenuItem *workingItem = [[[NSMenuItem alloc] initWithTitle:workingTitle action:nil keyEquivalent:@""] autorelease];
-  appMenu_ = [[NSMenu alloc] initWithTitle:menuTitle];
-  [appMenu_ addItem:workingItem];
+  NSString *menuTitle = NSLocalizedString(@"Apps", @"");
+  NSMenu *workingMenu = [[[NSMenu alloc] initWithTitle:menuTitle] autorelease];
+  [workingMenu addItem:workingItem];
+  return workingMenu;
+}
+
+- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  appMenu_ = [[self constructWorkingMenu] retain];
+  NSString *menuTitle = NSLocalizedString(@"Apps", @"");
+  NSMenuItem *item = [[[NSMenuItem alloc] initWithTitle:menuTitle action:nil keyEquivalent:@""] autorelease];
   [item setSubmenu:appMenu_];
   [[NSApp mainMenu] addItem:item];
+  if (nil == dockMenu_) {
+    dockMenu_ = [[self constructWorkingMenu] retain];
+  }
   kqueues_ = [[NSMutableDictionary alloc] init];
+  NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+  [nc addObserver:self selector:@selector(textFieldChanged:) name:NSControlTextDidChangeNotification object:nil];
   [self rebuildMenus];
 }
 
+- (void)awakeFromNib {
+  messageDefault_ = [[messageField_ stringValue] copy];
+}
+
 - (void)dealloc {
+  NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+  [nc removeObserver:self];
   [appMenu_ release];
+  [dockMenu_ release];
+  [ignoringParentheses_ release];
   [kqueues_ release];
+  [messageDefault_ release];
+  [messageField_ release];
+  [preferencesWindow_ release];
+  [rootField_ release];
   [super dealloc];
 }
 
@@ -266,13 +332,8 @@ typedef enum  {
 - (void)appBundle:(NSString *)file path:(NSString *)fullPath into:(NSMutableArray *)items {
   NSString *trimmedFile = nil;
 
-  CFStringRef displayName = NULL;
   // Prefer the localized name from the Info.plist.
-  if (noErr == LSCopyDisplayNameForURL((CFURLRef) [NSURL fileURLWithPath:fullPath], &displayName) &&
-    NULL != displayName) {
-    trimmedFile = [(NSString *)displayName autorelease];
-  }
-  if (nil == trimmedFile) {
+  if (nil == (trimmedFile = [[NSURL fileURLWithPath:fullPath] app_displayName])) {
     // Should never happen because Launch Services should already have looked up the correct name.
     NSRange matchRange = [file rangeOfString:@".app" options:NSCaseInsensitiveSearch|NSBackwardsSearch|NSAnchoredSearch];
     if (0 != matchRange.length) {
@@ -301,10 +362,9 @@ typedef enum  {
       [[item retain] autorelease];
       [subMenu removeItemAtIndex:0];
     } else {
-      CFStringRef displayName = NULL;
-      if (noErr == LSCopyDisplayNameForURL((CFURLRef) [NSURL fileURLWithPath:fullPath], &displayName) &&
-        NULL != displayName) {
-        file = [(NSString *)displayName autorelease];
+      NSString *displayName = [[NSURL fileURLWithPath:fullPath] app_displayName];
+      if (nil != displayName) {
+        file = displayName;
       }
       item = [[[NSMenuItem alloc] initWithTitle:file action:@selector(openAppItem:) keyEquivalent:@""] autorelease];
       [item setRepresentedObject:fullPath];
@@ -350,12 +410,6 @@ typedef enum  {
       }
     }
     return kSubDir;
-  } else if (AreCarbonAppsSupported()) {
-    NSDictionary *fileAttributes = [fm fileAttributesAtPath:fullPath traverseLink:YES];
-    OSType typeCode = [fileAttributes fileHFSTypeCode];
-    if (typeCode == 'APPL') {      
-      return kCarbonApp;
-    }
   }
   return kIgnore;
 }
@@ -364,14 +418,15 @@ typedef enum  {
 // main routine of this program: loop over a directory building menu items into an array
 - (void)buildTree:(NSString *)path into:(NSMutableArray *)items depth:(int)depth shouldListen:(BOOL)shouldListen {
   NSFileManager *fm = [NSFileManager defaultManager];
-  NSArray *files = [fm directoryContentsAtPath:path];
+  NSError *error = nil;
+  NSArray *files = [fm contentsOfDirectoryAtPath:path error:&error];
   NSEnumerator *fileEnumerator = [files objectEnumerator];
   NSString *file;
   while (nil != (file = [fileEnumerator nextObject])) {
     NSString *fullPath = [path stringByAppendingPathComponent:file];
-    if ([fullPath isAliasFile]) {
-      fullPath = [fullPath resolveAliasFile];
-    }
+//    if ([fullPath isAliasFile]) {
+//      fullPath = [fullPath resolveAliasFile];
+//    }
     switch ([self categorizeFile:file path:fullPath]) {
     case kAppBundle: [self appBundle:file path:fullPath into:items]; break;
     case kSubDir:    [self subDir:file path:fullPath into:items depth:depth + 1 shouldListen:shouldListen]; break;
@@ -394,14 +449,66 @@ typedef enum  {
   [menu resetFromArray:items];
 }
 
+/*
+ In macOS 10.15 (Catalina) Apple moved some apps into a second directory. This method takes a second, optional directory and merges both into a single menu.
+ */
+- (void)buildTree:(NSString *)path secondaryPath:(NSString *)path2 intoMenu:(NSMenu *)menu depth:(int)depth shouldListen:(BOOL)shouldListen {
+  if (shouldListen) {
+    [self addKQueueForPath:path];
+    if (path2.length) {
+      [self addKQueueForPath:path2];
+    }
+  }
+  NSMutableArray *items = [NSMutableArray array];
+  NSMenuItem *secondaryUtilities = nil;
+  if (path2.length) {
+    [self buildTree:path2 into:items depth:depth shouldListen:shouldListen];
+    secondaryUtilities = [items firstItemOfTitle:@"Utilities"];
+  }
+  [self buildTree:path into:items depth:depth shouldListen:shouldListen];
+  if (secondaryUtilities.submenu.itemArray.count) {
+    NSUInteger secondaryIndex = NSNotFound;
+    for (NSUInteger i = 0; i < items.count; ++i) {
+      NSMenuItem *item = items[i];
+      if (secondaryUtilities == item) {
+        secondaryIndex = i;
+      } else if ([item.title isEqual:@"Utilities"]) {
+        NSMenu *subMenu = item.submenu;
+        NSMutableArray *subUtils = [subMenu.itemArray mutableCopy];
+        // We have to copy the items, because the originals are still in secondaryUtilities.
+        for (NSMenuItem *item2 in secondaryUtilities.submenu.itemArray) {
+          if ( ! [subUtils containsObject:item2]){
+ // 9/06/2021 oster contains check needed to keep every item from appearing twice.
+           [subUtils addObject:[[item2 copy] autorelease]];
+          }
+        }
+        [subUtils sortUsingSelector:@selector(compareAsFinder:)];
+        [item.submenu resetFromArray:subUtils];
+        if (secondaryIndex != NSNotFound) {
+          [items removeObjectAtIndex:secondaryIndex];
+          secondaryIndex = NSNotFound;
+        }
+        break;
+      }
+    }
+  }
+  [items sortUsingSelector:@selector(compareAsFinder:)];
+  [menu resetFromArray:items];
+}
+
 // Do the actual work of rebuilding the menus in a worker thread.
 - (void)rebuildMenus {
   DEBUGBLOCK{ NSLog(@"rebuildMenus"); }
   isIgnoringParentheses_ = [[NSUserDefaults standardUserDefaults] boolForKey:@"ignoringParens"];
   if (!isRebuilding_) {
     isRebuilding_ = YES;
-    [self buildTree:[self rootPath] intoMenu:appMenu_ depth:0 shouldListen:YES];
-    [self buildTree:[self rootPath] intoMenu:dockMenu_ depth:0 shouldListen:NO];
+    NSString *rootPath = [self rootPath];
+    NSString *secondaryPath = nil;
+    if ([rootPath isEqual:@"/Applications"] || [rootPath isEqual:@"/Applications/"]) {
+      secondaryPath = @"/System/Applications";
+    }
+    [self buildTree:rootPath secondaryPath:secondaryPath intoMenu:appMenu_ depth:0 shouldListen:YES];
+    [self buildTree:rootPath secondaryPath:secondaryPath intoMenu:dockMenu_ depth:0 shouldListen:NO];
     isRebuilding_ = NO;
   }
   [self scheduleCheckForMore];
@@ -438,6 +545,7 @@ typedef enum  {
     NSString *s = [[NSUserDefaults standardUserDefaults] stringForKey:@"rootPath"];
     if (nil == s) { s = @""; }
     [rootField_ setStringValue:s];
+    [self validateRootField];
     [preferencesWindow_ makeKeyAndOrderFront:self];
   }
 }
@@ -445,14 +553,67 @@ typedef enum  {
 - (void)windowWillClose:(NSNotification *)notification {
   NSString *oldS = [[NSUserDefaults standardUserDefaults] stringForKey:@"rootPath"];
   NSString *s = [rootField_ stringValue];
-  if ([s length]) {
-    [[NSUserDefaults standardUserDefaults] setObject:s forKey:@"rootPath"];
+  if (!([oldS isEqual:s] || ([oldS length] == 0 && [s length] == 0))) {
+    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+    if ([s length]) {
+      [ud setObject:s forKey:@"rootPath"];
+    } else {
+      [ud removeObjectForKey:@"rootPath"];
+    }
+    [ud synchronize];
+    if (!isTerminating_) {
+      [self rebuildMenus];
+    }
+  }
+}
+
+- (void)textFieldChanged:(NSNotification *)notification {
+  NSTextField *textField = (NSTextField *)[notification object];
+  if (textField == rootField_) {
+    [self validateRootField];
+  }
+}
+
+- (NSColor *)redColor {
+  return [NSColor colorWithRed:0xAA/255. green:0x0A/255. blue:0x12/255. alpha:1];
+}
+
+- (void)validateRootField {
+  NSString *path = [rootField_ stringValue];
+  switch ([self classifyPath:path]) {
+    case kGoodKind:
+      [messageField_ setStringValue:messageDefault_];
+      [messageField_ setTextColor:[NSColor blackColor]];
+      break;
+    case kNonexistentKind:
+      [messageField_ setTextColor:[self redColor]];
+      [messageField_ setStringValue:NSLocalizedString(@"errNonexistent", 0)];
+      break;
+    case kEmptyKind:
+      [messageField_ setTextColor:[self redColor]];
+      [messageField_ setStringValue:NSLocalizedString(@"errEmpty", 0)];
+      break;
+  }
+}
+
+- (PathKindEnum)classifyPath:(NSString *)path {
+  path = [path stringByExpandingTildeInPath];
+  if ([path length] == 0) {
+    return kGoodKind;
   } else {
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"rootPath"];
+    NSString *file = [path lastPathComponent];
+//    if ([path isAliasFile]) {
+//      path = [path resolveAliasFile];
+//    }
+    switch ([self categorizeFile:file path:path]) {
+      case kSubDir:
+        // TODO: check that the directory has app contents.
+        return kGoodKind;
+      default:
+        return kNonexistentKind;
+    }
   }
-  if (!isTerminating_ && !(oldS == s || [oldS isEqual:s])) {
-    [self rebuildMenus];
-  }
+  return kNonexistentKind;
 }
 
 

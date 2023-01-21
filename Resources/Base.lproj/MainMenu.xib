@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment version="101200" identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
+            <connections>
+                <outlet property="delegate" destination="375" id="376"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject">
+            <connections>
+                <outlet property="delegate" destination="375" id="387"/>
+                <outlet property="dockMenu" destination="377" id="388"/>
+            </connections>
+        </customObject>
+        <menu title="AMainMenu" systemMenu="main" id="29" userLabel="MainMenu">
+            <items>
+                <menuItem title="AppMenuBoy" id="56">
+                    <attributedString key="attributedTitle"/>
+                    <menu key="submenu" title="AppMenuBoy" systemMenu="apple" id="57">
+                        <items>
+                            <menuItem title="About AppMenuBoy" id="58">
+                                <attributedString key="attributedTitle"/>
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="orderFrontStandardAboutPanel:" target="-2" id="142"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="236">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Preferences…" keyEquivalent="," id="129">
+                                <connections>
+                                    <action selector="showPreferencesPanel:" target="375" id="403"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="143">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Services" id="131">
+                                <menu key="submenu" title="Services" systemMenu="services" id="130"/>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="144">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Hide AppMenuBoy" keyEquivalent="h" id="134">
+                                <attributedString key="attributedTitle"/>
+                                <connections>
+                                    <action selector="hide:" target="-1" id="367"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Hide Others" keyEquivalent="h" id="145">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="hideOtherApplications:" target="-1" id="368"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show All" id="150">
+                                <connections>
+                                    <action selector="unhideAllApplications:" target="-1" id="370"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="149">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Quit AppMenuBoy" keyEquivalent="q" id="136">
+                                <attributedString key="attributedTitle"/>
+                                <connections>
+                                    <action selector="terminate:" target="-1" id="369"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+            </items>
+            <point key="canvasLocation" x="-167" y="119"/>
+        </menu>
+        <customObject id="375" userLabel="App Menu" customClass="AppMenu">
+            <connections>
+                <outlet property="dockMenu_" destination="377" id="383"/>
+                <outlet property="ignoringParentheses_" destination="394" id="409"/>
+                <outlet property="messageField_" destination="413" id="wId-cf-6fO"/>
+                <outlet property="preferencesWindow_" destination="391" id="400"/>
+                <outlet property="rootField_" destination="415" id="418"/>
+            </connections>
+        </customObject>
+        <menu id="377" userLabel="DockMenu">
+            <items>
+                <menuItem title="Working…" enabled="NO" id="378"/>
+            </items>
+            <connections>
+                <outlet property="delegate" destination="375" id="384"/>
+            </connections>
+            <point key="canvasLocation" x="-321" y="27"/>
+        </menu>
+        <window title="Preferences" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" frameAutosaveName="Preferences" animationBehavior="default" id="391" userLabel="Window (Preferences)">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES"/>
+            <windowPositionMask key="initialPositionMask" leftStrut="YES" bottomStrut="YES"/>
+            <rect key="contentRect" x="196" y="458" width="296" height="116"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="2560" height="1415"/>
+            <view key="contentView" id="392">
+                <rect key="frame" x="0.0" y="0.0" width="296" height="116"/>
+                <autoresizingMask key="autoresizingMask"/>
+                <subviews>
+                    <button translatesAutoresizingMaskIntoConstraints="NO" id="394">
+                        <rect key="frame" x="18" y="80" width="258" height="18"/>
+                        <buttonCell key="cell" type="check" title="Skip Folders like this: ( …any… )" bezelStyle="regularSquare" imagePosition="left" alignment="left" state="on" inset="2" id="412">
+                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                        <connections>
+                            <action selector="toggleIgnoringParentheses:" target="375" id="410"/>
+                        </connections>
+                    </button>
+                    <textField verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="413">
+                        <rect key="frame" x="17" y="50" width="261" height="16"/>
+                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Start Folder (defaults to /Applications )" id="414">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <textField verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="415">
+                        <rect key="frame" x="20" y="20" width="256" height="21"/>
+                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" state="on" borderStyle="bezel" drawsBackground="YES" id="416">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                </subviews>
+                <constraints>
+                    <constraint firstAttribute="bottom" secondItem="415" secondAttribute="bottom" constant="20" symbolic="YES" id="1Ys-6w-6vD"/>
+                    <constraint firstItem="413" firstAttribute="top" secondItem="394" secondAttribute="bottom" constant="15" id="1zU-P8-jJi"/>
+                    <constraint firstAttribute="trailing" secondItem="394" secondAttribute="trailing" constant="20" symbolic="YES" id="6Ng-vE-kA8"/>
+                    <constraint firstItem="415" firstAttribute="leading" secondItem="392" secondAttribute="leading" constant="20" symbolic="YES" id="DPB-L1-aeB"/>
+                    <constraint firstItem="415" firstAttribute="top" secondItem="413" secondAttribute="bottom" constant="9" id="EgV-Fi-w9w"/>
+                    <constraint firstAttribute="trailing" secondItem="415" secondAttribute="trailing" constant="20" symbolic="YES" id="J9B-pz-2oA"/>
+                    <constraint firstItem="394" firstAttribute="leading" secondItem="392" secondAttribute="leading" constant="20" symbolic="YES" id="coA-sc-B9h"/>
+                    <constraint firstItem="394" firstAttribute="top" secondItem="392" secondAttribute="top" constant="19" id="m5y-F9-Kvw"/>
+                    <constraint firstItem="413" firstAttribute="leading" secondItem="392" secondAttribute="leading" constant="19" id="reD-0X-2ne"/>
+                    <constraint firstAttribute="trailing" secondItem="413" secondAttribute="trailing" constant="20" symbolic="YES" id="whG-0E-sjM"/>
+                </constraints>
+            </view>
+            <connections>
+                <outlet property="delegate" destination="375" id="419"/>
+            </connections>
+            <point key="canvasLocation" x="292" y="336"/>
+        </window>
+    </objects>
+</document>
